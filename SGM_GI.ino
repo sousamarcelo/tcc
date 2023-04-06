@@ -34,6 +34,9 @@ long lastMsg = 0;
 char msg[50];
 int value = 0;
 
+
+
+/* base
 // Definindo pinagens // ----------------------------------------->> PINAGEM #Marcelo 04/03/2022
 const int led_Pin = 19;
 const int artificial_light_relay_pin = 2; // led simula luz artificial 21/03
@@ -44,29 +47,29 @@ const int soil_moisture_sensor_pin = 35;
 const int light_detection_sensor_pin = 34; //sensor de iluminação 21/03
 const int maximun_water_level_sensor_pin = 33; //water_level_max_sensor_pin
 const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
-//
+*/
+
+//DEFINIÇÃO DE PINOS
+#define led_Pin  19
+#define pinRele1 4
+#define pinRele2 16
+
+//Defnições temperatura
+#define temp_max 60    // Temperatura Maxima
+#define temp_ideal 55  // Temperatura Ideal
+#define temp_min 50    // Temperatura minima
 
 
-//uncomment the following lines if you're using SPI
-/*#include <SPI.h>
-#define BME_SCK 18
-#define BME_MISO 19
-#define BME_MOSI 23
-#define BME_CS 5*/
-
-//Variaveis para valores processado dos sensores
+//Instancia Objetos
 Adafruit_BME280 bme; // I2C
-//Adafruit_BME280 bme(BME_CS); // hardware SPI
-//Adafruit_BME280 bme(BME_CS, BME_MOSI, BME_MISO, BME_SCK); // software SPI
+
+//Declaração de variaveis
 float temperature = 0.0;
 float humidity = 0.0;
-float soil_moisture = 0; // -------------------------------------------------->> #Marcelo 04/03/2022
-float artificial_lighting = 0.0; // Luz artificial //Marcelo 21/03
-bool  water_pump_relay1_status;
-bool  maximum_water_level_sensor_status;
-bool  minimun_water_level_sensor_status;
 
 int   dry_soil = 50;
+
+int estado = 0;
 
 //controlando data e hora Marcelo 25/03
 WiFiUDP udp;
@@ -93,8 +96,10 @@ void setup() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-  //Definindo pinagens
   pinMode(led_Pin, OUTPUT);
+  /*
+  //Definindo pinagens
+  
   pinMode(artificial_light_relay_pin, OUTPUT); // liga iluminação
   pinMode(soil_moisture_sensor_pin,INPUT);
   pinMode(light_detection_sensor_pin,INPUT); //Sensor de rediação/iluminação
@@ -102,10 +107,17 @@ void setup() {
   pinMode(maximun_water_level_sensor_pin, INPUT);
   pinMode(minimum_water_level_sensor_pin, INPUT); 
   pinMode(air_humidifier_relay_pin, OUTPUT);
+  */
 
+  /*
   //setando valor inicial do rele da bomba d'agua
   digitalWrite(water_pump_relay1_pin, LOW); 
   digitalWrite(air_humidifier_relay_pin, LOW); 
+  */
+
+  pinMode(pinRele1, OUTPUT);
+  pinMode(pinRele2, OUTPUT);
+  
   
   //controlando data e hora Marcelo 25/03
   ntp.begin();                // Inicia o protocolo
@@ -183,6 +195,7 @@ void reconnect() {
   }
 }
 
+/*
 // calculando umidade do Solo // --------------------------------->> #Marcelo 04/03/2023
 void calculateSoilMoisture(){
   float sensorReading = 0;
@@ -194,7 +207,9 @@ void calculateSoilMoisture(){
 
   //Serial.println();
 }
+*/
 
+/*
 //Controlando nivel de agua do Reservatório
 void reservoir_water_control(){
   minimun_water_level_sensor_status = digitalRead(minimum_water_level_sensor_pin);
@@ -209,7 +224,9 @@ void reservoir_water_control(){
     //Serial.println(" --> solenoide delisgada <--");
   }
 }
+*/
 
+/*
 void lighting_control(){
   artificial_lighting = map(analogRead(light_detection_sensor_pin), 0, 4095, 100, 0);
   //float square_ratio = artificial_lighting / 4095;
@@ -221,7 +238,7 @@ void lighting_control(){
     {digitalWrite(artificial_light_relay_pin, LOW);
   }
 }  
-
+*/
 
 //controlando data e hora Marcelo 25/03
 String relogio_ntp(int retorno) {
@@ -268,7 +285,7 @@ String relogio_ntp(int retorno) {
   return hora_ntp;
 
 }
-
+/*
 float air_humidity_control(float humidity_Aux){
   if(humidity_Aux <= 65.0){ 
     digitalWrite(air_humidifier_relay_pin, LOW);    
@@ -278,45 +295,21 @@ float air_humidity_control(float humidity_Aux){
   return humidity_Aux;
   
 }
+*/
 
 void loop() { 
   
   if (!client.connected()) {
     reconnect();
   }
-  client.loop();
+  client.loop();  
   
-  calculateSoilMoisture();   
 
   // Temperature in Celsius
  temperature = bme.readTemperature(); //------------------------------------------------------------------->> desativado temporarioamente por que o sensor está com erro de leitura 25/03
   // Umidade do ar
  humidity = bme.readHumidity();  //------------------------------------------------------------------->> desativado temporarioamente por que o sensor está com erro de leitura 25/03
-  // Uncomment the next line to set temperature in Fahrenheit 
-  // (and comment the previous temperature line)
-  //temperature = 1.8 * bme.readTemperature() + 32; // Temperature in Fahrenheit
-
-  // veriaveis de Status
-  //water_pump_relay1_status =         digitalRead(water_pump_relay1_pin); avaliar, está lendo do proprio esp32
   
-  //acionando bomba de agua se o solo estiver umido
-
-  air_humidity_control(humidity);
-    
-  reservoir_water_control();
-  
-  
-  if(soil_moisture < dry_soil){    
-    if(minimun_water_level_sensor_status != 0.0){   
-      digitalWrite(water_pump_relay1_pin, HIGH);
-    } else {
-      digitalWrite(water_pump_relay1_pin, LOW);
-    }                 
-  } else {
-    digitalWrite(water_pump_relay1_pin, LOW); 
-  }
-
-  lighting_control();
 
   
   
@@ -324,7 +317,7 @@ void loop() {
   if (now - lastMsg > 10000) { //120000
     lastMsg = now;    
     
-    
+    /*
     // Convert the value to a char array //---------------------------------------->> conversão necessaria para publicação no topico
     char tempString[8];
     dtostrf(temperature, 1, 2, tempString);
@@ -394,6 +387,8 @@ void loop() {
 
     Serial.print("Quantidade de Radiação: ");
     Serial.println(artificial_lighting);
+
+    */
     
     //Serial.println(relogio_ntp(0)); 
 

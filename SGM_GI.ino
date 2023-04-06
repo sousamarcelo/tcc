@@ -50,14 +50,18 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 */
 
 //DEFINIÇÃO DE PINOS
-#define led_Pin  19
-#define pinRele1 4
-#define pinRele2 16
+#define led_Pin  19 // veio do padrao para testar o fluxo de app para o esp
+#define RELAY_1_PIN 4
+#define RELAY_2_PIN 16
+
 
 //Defnições temperatura
-#define temp_max 60    // Temperatura Maxima
-#define temp_ideal 55  // Temperatura Ideal
-#define temp_min 50    // Temperatura minima
+#define TEMP_MAX 28    // Temperatura Maxima
+#define TEMP_IDEAL 25  // Temperatura Ideal
+#define TEMP_MIN 22    // Temperatura minima
+
+#define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
+#define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
 
 
 //Instancia Objetos
@@ -69,7 +73,9 @@ float humidity = 0.0;
 
 int   dry_soil = 50;
 
-int estado = 0;
+int state = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
+
+unsigned long readControl;
 
 //controlando data e hora Marcelo 25/03
 WiFiUDP udp;
@@ -96,7 +102,7 @@ void setup() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-  pinMode(led_Pin, OUTPUT);
+  
   /*
   //Definindo pinagens
   
@@ -114,9 +120,12 @@ void setup() {
   digitalWrite(water_pump_relay1_pin, LOW); 
   digitalWrite(air_humidifier_relay_pin, LOW); 
   */
+  pinMode(led_Pin, OUTPUT);
+  pinMode(RELAY_1_PIN, OUTPUT);
+  pinMode(RELAY_2_PIN, OUTPUT);
 
-  pinMode(pinRele1, OUTPUT);
-  pinMode(pinRele2, OUTPUT);
+  digitalWrite(RELAY_1_PIN, HIGH);
+  digitalWrite(RELAY_2_PIN, HIGH);
   
   
   //controlando data e hora Marcelo 25/03
@@ -195,51 +204,6 @@ void reconnect() {
   }
 }
 
-/*
-// calculando umidade do Solo // --------------------------------->> #Marcelo 04/03/2023
-void calculateSoilMoisture(){
-  float sensorReading = 0;
-  for (int i; i < 10; i++) {
-    sensorReading += analogRead(soil_moisture_sensor_pin);
-  }
-  sensorReading /= 10.0;
-  soil_moisture = map(sensorReading, 360, 4095, 100, 0);
-
-  //Serial.println();
-}
-*/
-
-/*
-//Controlando nivel de agua do Reservatório
-void reservoir_water_control(){
-  minimun_water_level_sensor_status = digitalRead(minimum_water_level_sensor_pin);
-  maximum_water_level_sensor_status = digitalRead(maximun_water_level_sensor_pin);
-
-  if (minimun_water_level_sensor_status == 0.0){
-    //Serial.println("Nival critico de reservatório de agua --> acionar solenoide <--");
-    if(maximum_water_level_sensor_status == 1.0){
-      //Serial.println("Nivel maximo do reservatório de agua atingido --> desligar solenoide <--");
-    }
-  } else { // só por segurança o comando para desligar o solenoide nesse ponto
-    //Serial.println(" --> solenoide delisgada <--");
-  }
-}
-*/
-
-/*
-void lighting_control(){
-  artificial_lighting = map(analogRead(light_detection_sensor_pin), 0, 4095, 100, 0);
-  //float square_ratio = artificial_lighting / 4095;
-  //float square_ratio = pow(artificial_lighting, 2.0);
-  //analogWrite(artificial_light_pin, !(square_ratio*255));
-  if(artificial_lighting < 50.0){ //artificial_lighting < 20.0 ou relogio_ntp(3) >= "800"[utiliza o valor em horas para somar]
-     digitalWrite(artificial_light_relay_pin, HIGH); //!artificial_lighting
-  } else
-    {digitalWrite(artificial_light_relay_pin, LOW);
-  }
-}  
-*/
-
 //controlando data e hora Marcelo 25/03
 String relogio_ntp(int retorno) {
   //Esta condição será chamada uma unica fez para atualizar a data e hora com NTP
@@ -285,36 +249,56 @@ String relogio_ntp(int retorno) {
   return hora_ntp;
 
 }
-/*
-float air_humidity_control(float humidity_Aux){
-  if(humidity_Aux <= 65.0){ 
-    digitalWrite(air_humidifier_relay_pin, LOW);    
-  } else {
-    digitalWrite(air_humidifier_relay_pin, HIGH);
-  }
-  return humidity_Aux;
-  
-}
-*/
+
 
 void loop() { 
-  
+    
   if (!client.connected()) {
     reconnect();
   }
   client.loop();  
-  
 
-  // Temperature in Celsius
- temperature = bme.readTemperature(); //------------------------------------------------------------------->> desativado temporarioamente por que o sensor está com erro de leitura 25/03
-  // Umidade do ar
- humidity = bme.readHumidity();  //------------------------------------------------------------------->> desativado temporarioamente por que o sensor está com erro de leitura 25/03
-  
+//Controle de leitura dos sensores  
+  if(millis() - readControl > READING_INTERVAL_CORE){
+    // Temperature in Celsius
+    temperature = bme.readTemperature();
+     // Umidade do ar
+    humidity = bme.readHumidity();
 
-  
+    readControl = millis();
+    
+    //Serial.println("Sensores lidos com sucesso"); debug
+  }
+
+  ////////////////  --->> CONTROLE DA TEMPERATURA <<---
+  switch (state) {
+    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+      if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        state = -1;
+        digitalWrite(RELAY_1_PIN, LOW);        
+      } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+        state = 1;
+        digitalWrite(RELAY_2_PIN, LOW);        
+      }
+      break;
+    
+    case -1:
+      if (temperature >= TEMP_IDEAL) {
+        state = 0;
+        digitalWrite(RELAY_1_PIN, HIGH);
+      }
+      break;
+    
+    case 1:
+      if (temperature <= TEMP_IDEAL) {
+        state = 0;
+        digitalWrite(RELAY_2_PIN, HIGH);        
+      }
+      break;
+  }  
   
   long now = millis();
-  if (now - lastMsg > 10000) { //120000
+  if (now - lastMsg > 5000) { //120000
     lastMsg = now;    
     
     /*
@@ -361,42 +345,24 @@ void loop() {
     Serial.print("minimun_water_level_sensor_status: ");
     Serial.println(minlevelStatusString);
     client.publish("esp32/MaximunWaterLevelSensorStatus/value", minlevelStatusString);
-    
-
-    Serial.println();
-     //monitorando nivel maximo do reservatório para serial
-    if(maximum_water_level_sensor_status == 0) {
-      Serial.println("Nivel Alto do reservatório --> SIM <--");
-    } else {
-      Serial.println("Nivel Alto do reservatório --> NÃO <--");
-    }  
-    
-    if(minimun_water_level_sensor_status == 0) {
-      Serial.println("Nivel Critico do reservató --> SIM <--");
-    }  else {
-      Serial.println("Nivel Critico do reservató --> NÃO <--");
-    }
-
-    if(water_pump_relay1_status == 1.00) {
-      Serial.println("Bomba de Irrigação         --> SIM <--");
-    } else {
-      Serial.println("Bomba de Irrigação         --> NÃO <--");
-    }
-
-    Serial.println();    
-
-    Serial.print("Quantidade de Radiação: ");
-    Serial.println(artificial_lighting);
-
+ 
     */
+
+    Serial.print("Tempetarura: ");
+    Serial.println(temperature);
+
+    Serial.print("Estado: ");
+    Serial.println(state);
+
+    Serial.println("----------");
     
     //Serial.println(relogio_ntp(0)); 
 
-    Serial.println(relogio_ntp(1));
+    //Serial.println(relogio_ntp(1)); //data e hora completa formatada --> "06/04/2023 19:10:58"
     //delay(1000);
-    Serial.println(relogio_ntp(2));
+    //Serial.println(relogio_ntp(2)); //data completa --> "06/04/2023"
     //delay(1000);    
-    Serial.println(relogio_ntp(3));
+    //Serial.println(relogio_ntp(3)); // hora --> "1910"
     
     Serial.println();
     //delay(1000);        

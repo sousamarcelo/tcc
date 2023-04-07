@@ -51,14 +51,20 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 
 //DEFINIÇÃO DE PINOS
 #define led_Pin  19 // veio do padrao para testar o fluxo de app para o esp
-#define RELAY_1_PIN 4
-#define RELAY_2_PIN 16
+#define RELAY_1_PIN 4 // temp min
+#define RELAY_2_PIN 16 // temp max
+#define RELAY_3_PIN 2 // umidificador
 
 
-//Defnições temperatura
+//DEFINIÇÕES TEMPERATURA
 #define TEMP_MAX 28    // Temperatura Maxima
 #define TEMP_IDEAL 25  // Temperatura Ideal
 #define TEMP_MIN 22    // Temperatura minima
+
+//DEFINIÇÕES UMIDADE DO AR
+#define UR_MAX 70   //70
+#define UR_IDEAL 65 //65
+#define UR_MIN 60   //60
 
 #define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
 #define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
@@ -73,7 +79,8 @@ float humidity = 0.0;
 
 int   dry_soil = 50;
 
-int state = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
+int stateTemperature = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
+int stateHumidity = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
 
 unsigned long readControl;
 
@@ -123,9 +130,11 @@ void setup() {
   pinMode(led_Pin, OUTPUT);
   pinMode(RELAY_1_PIN, OUTPUT);
   pinMode(RELAY_2_PIN, OUTPUT);
+  pinMode(RELAY_3_PIN, OUTPUT);
 
-  digitalWrite(RELAY_1_PIN, HIGH);
-  digitalWrite(RELAY_2_PIN, HIGH);
+  digitalWrite(RELAY_1_PIN, HIGH); // RELE DE ALTA
+  digitalWrite(RELAY_2_PIN, HIGH); // RELE DE ALTA
+  digitalWrite(RELAY_3_PIN, LOW);
   
   
   //controlando data e hora Marcelo 25/03
@@ -271,31 +280,67 @@ void loop() {
   }
 
   ////////////////  --->> CONTROLE DA TEMPERATURA <<---
-  switch (state) {
+   //ATENÇÃO! RELE DUPLOS COM ACIONAMENTO INVETIDOS PARA CONTROLE DE TEMPERATURA
+  switch (stateTemperature) {
     case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
       if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
-        state = -1;
+        stateTemperature = -1;
         digitalWrite(RELAY_1_PIN, LOW);        
       } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-        state = 1;
+        stateTemperature = 1;
         digitalWrite(RELAY_2_PIN, LOW);        
       }
       break;
     
     case -1:
       if (temperature >= TEMP_IDEAL) {
-        state = 0;
+        stateTemperature = 0;
         digitalWrite(RELAY_1_PIN, HIGH);
       }
       break;
     
     case 1:
       if (temperature <= TEMP_IDEAL) {
-        state = 0;
+        stateTemperature = 0;
         digitalWrite(RELAY_2_PIN, HIGH);        
       }
       break;
-  }  
+  } 
+
+  ////////////////  --->> CONTROLE DA TEMPERATURA <<--- FIM
+
+  ////////////////  --->> CONTROLE DA UMIDADE DO AR <<---  obs só para baixa umidade  
+  switch (stateHumidity) { 
+    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+      if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        stateHumidity = -1;
+        digitalWrite(RELAY_3_PIN, HIGH);       
+      } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+        stateHumidity = 1;        
+        //digitalWrite(RELAY_2_PIN, LOW);        
+      }
+      break;
+    
+    case -1:
+      if (humidity >= UR_IDEAL) {
+        stateHumidity = 0;
+        digitalWrite(RELAY_3_PIN, LOW);
+      }
+      break;
+    
+    case 1:
+      if (stateHumidity <= UR_IDEAL) {
+        stateHumidity = 0;
+        //digitalWrite(RELAY_2_PIN, HIGH);        
+      }
+      break;
+  } 
+
+  ////////////////  --->> CONTROLE DA UMIDADE DO AR <<--- FIM
+
+
+
+
   
   long now = millis();
   if (now - lastMsg > 5000) { //120000
@@ -352,7 +397,15 @@ void loop() {
     Serial.println(temperature);
 
     Serial.print("Estado: ");
-    Serial.println(state);
+    Serial.println(stateTemperature);
+
+    Serial.println("----------");
+
+     Serial.print("UMIDADE: ");
+    Serial.println(humidity);
+
+    Serial.print("Estado: ");
+    Serial.println(stateHumidity);
 
     Serial.println("----------");
     

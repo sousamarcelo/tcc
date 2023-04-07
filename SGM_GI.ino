@@ -50,12 +50,14 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 */
 
 //DEFINIÇÃO DE PINOS
-#define led_Pin               19 // veio do padrao para testar o fluxo de app para o esp
-#define RELAY_1_PIN            4 // temp min
-#define RELAY_2_PIN           16 // temp max
-#define RELAY_3_PIN            2 // umidificador mini
-#define RELAY_4_PIN           17 // Iluminação min
-#define RADIATION_SENSOR_PIN  34 // Sensor de Radiação
+#define led_Pin                  19 // veio do padrao para testar o fluxo de app para o esp
+#define RELAY_1_PIN               4 // temp min
+#define RELAY_2_PIN              16 // temp max
+#define RELAY_3_PIN               2 // umidificador mini
+#define RELAY_4_PIN              17 // Iluminação min
+#define RELAY_5_PIN              15 // bomba de irrigação
+#define RADIATION_SENSOR_PIN     34 // Sensor de Radiação
+#define SOIL_MOISTURE_SENSOR_PIN 35 //sensor de umidade do solo
 
 
 //DEFINIÇÕES TEMPERATURA
@@ -73,6 +75,11 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define RA_IDEAL  50   //
 #define RA_MIN    35   //60
 
+//DEFINIÇÕES UMIDADE DO SOLO
+#define SM_MAX   100   //
+#define SM_IDEAL  70   // umidade do solo ideal
+#define SM_MIN    60   // umidade do solo minimo
+
 #define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
 #define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
 
@@ -81,15 +88,17 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 Adafruit_BME280 bme; // I2C
 
 //Declaração de variaveis
-float temperature = 0.0;
-float humidity =    0.0;
-float radiation =   0.0;
+float temperature =  0.0;
+float humidity =     0.0;
+float radiation =    0.0;
+float soilMoisture = 0.0;
 
 //int   dry_soil = 50;
 
 int stateTemperature = 0;  // 0 = temperatura ideal | -1 = peutier aquecimento ligado | 1 = peutier resfriamento Ligado
 int stateHumidity =    0;     // 0 = Ar ideal | -1 = Umidificador ligado | 1 = desumidificador Ligado(não utilizado)
 int stateRadiation =   0;    // 0 = radiação ideal | -1 = iluminação ligado | 1 = (não utilizado) // iluminação por sensor só para testes, depois será por horario agendado
+int statusSoilMoisture = 0;  // 0 = umidade do solo ideal | -1 = irrigação ligado | 1 = irrigação desligada
 
 unsigned long readControl;
 
@@ -136,7 +145,10 @@ void setup() {
   pinMode(RELAY_2_PIN, OUTPUT);
   pinMode(RELAY_3_PIN, OUTPUT);
   pinMode(RELAY_4_PIN, OUTPUT);
+  pinMode(RELAY_5_PIN, OUTPUT);  
   pinMode(RADIATION_SENSOR_PIN, INPUT);
+  pinMode(SOIL_MOISTURE_SENSOR_PIN, INPUT);
+  
 
   
 
@@ -146,6 +158,7 @@ void setup() {
   digitalWrite(RELAY_2_PIN, HIGH); // RELE DE ALTA
   digitalWrite(RELAY_3_PIN, LOW);
   digitalWrite(RELAY_4_PIN, LOW);
+  digitalWrite(RELAY_5_PIN, LOW); 
   
   
   //controlando data e hora Marcelo 25/03
@@ -270,6 +283,14 @@ String relogio_ntp(int retorno) {
 
 }
 
+void calculateSoilMoisture(){
+  float sensorReading = 0.0;
+  for (int i; i < 10; i++) {
+    sensorReading += analogRead(SOIL_MOISTURE_SENSOR_PIN);
+  }
+  sensorReading /= 10.0;
+  soilMoisture = map(sensorReading, 360, 4095, 100, 0);
+}
 
 void loop() { 
     
@@ -277,15 +298,17 @@ void loop() {
     reconnect();
   }
   client.loop();  
+  calculateSoilMoisture();
 
 //Controle de leitura dos sensores  
-  if(millis() - readControl > READING_INTERVAL_CORE){
+  if(millis() - readControl > READING_INTERVAL_CORE){        
+    
     // Temperature in Celsius
     temperature = bme.readTemperature();
      // Umidade do ar
     humidity = bme.readHumidity();
 
-    radiation = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);
+    radiation = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);    
 
     readControl = millis();
     
@@ -376,9 +399,44 @@ void loop() {
         //digitalWrite(RELAY_4_PIN, HIGH);        
       }
       break;
-  }   
-  
+  }  
   ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM
+
+  ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<---
+
+  
+  switch (statusSoilMoisture) { 
+    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+      if (soilMoisture < SM_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        statusSoilMoisture = -1;
+        digitalWrite(RELAY_5_PIN, HIGH);       
+      } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+        statusSoilMoisture = 1;        
+        //digitalWrite(RELAY_5_PIN, LOW);        
+      }
+      break;
+    
+    case -1:
+      if (soilMoisture >= SM_IDEAL) {
+        statusSoilMoisture = 0;
+        digitalWrite(RELAY_5_PIN, LOW);
+      }
+      break;
+    
+    case 1:
+      if (soilMoisture <= SM_IDEAL) {
+        statusSoilMoisture = 0;
+        //digitalWrite(RELAY_5_PIN, HIGH);        
+      }
+      break;
+  } 
+  
+
+
+  ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<--- FIM
+
+
+
   
   long now = millis();
   if (now - lastMsg > 5000) { //120000
@@ -454,6 +512,16 @@ void loop() {
     Serial.println(stateRadiation);
 
     Serial.println("----------");
+
+    Serial.print("Umidade do Solo: ");
+    Serial.println(soilMoisture);
+
+    Serial.print("Estado: ");
+    Serial.println(statusSoilMoisture);
+
+    Serial.println("----------");
+
+    
 
 
 

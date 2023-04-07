@@ -50,21 +50,28 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 */
 
 //DEFINIÇÃO DE PINOS
-#define led_Pin  19 // veio do padrao para testar o fluxo de app para o esp
-#define RELAY_1_PIN 4 // temp min
-#define RELAY_2_PIN 16 // temp max
-#define RELAY_3_PIN 2 // umidificador
+#define led_Pin               19 // veio do padrao para testar o fluxo de app para o esp
+#define RELAY_1_PIN            4 // temp min
+#define RELAY_2_PIN           16 // temp max
+#define RELAY_3_PIN            2 // umidificador mini
+#define RELAY_4_PIN           17 // Iluminação min
+#define RADIATION_SENSOR_PIN  34 // Sensor de Radiação
 
 
 //DEFINIÇÕES TEMPERATURA
-#define TEMP_MAX 28    // Temperatura Maxima
-#define TEMP_IDEAL 25  // Temperatura Ideal
-#define TEMP_MIN 22    // Temperatura minima
+#define TEMP_MAX   28    // Temperatura Maxima
+#define TEMP_IDEAL 25    // Temperatura Ideal
+#define TEMP_MIN   22    // Temperatura minima
 
 //DEFINIÇÕES UMIDADE DO AR
-#define UR_MAX 70   //70
-#define UR_IDEAL 65 //65
-#define UR_MIN 60   //60
+#define UR_MAX   70   //70
+#define UR_IDEAL 65   //65
+#define UR_MIN   60   //60
+
+//DEFINIÇÕES REDIAÇÃO
+#define RA_MAX   100   //
+#define RA_IDEAL  50   //
+#define RA_MIN    35   //60
 
 #define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
 #define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
@@ -75,12 +82,14 @@ Adafruit_BME280 bme; // I2C
 
 //Declaração de variaveis
 float temperature = 0.0;
-float humidity = 0.0;
+float humidity =    0.0;
+float radiation =   0.0;
 
-int   dry_soil = 50;
+//int   dry_soil = 50;
 
-int stateTemperature = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
-int stateHumidity = 0;  // 0 = Ar ideal | -1 = Umidificador ligado | 1 = Ar condicionado Ligado
+int stateTemperature = 0;  // 0 = temperatura ideal | -1 = peutier aquecimento ligado | 1 = peutier resfriamento Ligado
+int stateHumidity =    0;     // 0 = Ar ideal | -1 = Umidificador ligado | 1 = desumidificador Ligado(não utilizado)
+int stateRadiation =   0;    // 0 = radiação ideal | -1 = iluminação ligado | 1 = (não utilizado) // iluminação por sensor só para testes, depois será por horario agendado
 
 unsigned long readControl;
 
@@ -121,20 +130,22 @@ void setup() {
   pinMode(minimum_water_level_sensor_pin, INPUT); 
   pinMode(air_humidifier_relay_pin, OUTPUT);
   */
-
-  /*
-  //setando valor inicial do rele da bomba d'agua
-  digitalWrite(water_pump_relay1_pin, LOW); 
-  digitalWrite(air_humidifier_relay_pin, LOW); 
-  */
+  
   pinMode(led_Pin, OUTPUT);
   pinMode(RELAY_1_PIN, OUTPUT);
   pinMode(RELAY_2_PIN, OUTPUT);
   pinMode(RELAY_3_PIN, OUTPUT);
+  pinMode(RELAY_4_PIN, OUTPUT);
+  pinMode(RADIATION_SENSOR_PIN, INPUT);
+
+  
+
+  
 
   digitalWrite(RELAY_1_PIN, HIGH); // RELE DE ALTA
   digitalWrite(RELAY_2_PIN, HIGH); // RELE DE ALTA
   digitalWrite(RELAY_3_PIN, LOW);
+  digitalWrite(RELAY_4_PIN, LOW);
   
   
   //controlando data e hora Marcelo 25/03
@@ -274,6 +285,8 @@ void loop() {
      // Umidade do ar
     humidity = bme.readHumidity();
 
+    radiation = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);
+
     readControl = millis();
     
     //Serial.println("Sensores lidos com sucesso"); debug
@@ -329,18 +342,43 @@ void loop() {
       break;
     
     case 1:
-      if (stateHumidity <= UR_IDEAL) {
+      if (humidity <= UR_IDEAL) {
         stateHumidity = 0;
         //digitalWrite(RELAY_2_PIN, HIGH);        
       }
       break;
   } 
-
   ////////////////  --->> CONTROLE DA UMIDADE DO AR <<--- FIM
 
-
-
-
+  ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- PARA TESTES POR SENSOR
+  
+  switch (stateRadiation) { 
+    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+      if (radiation < RA_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        stateRadiation = -1;
+        digitalWrite(RELAY_4_PIN, HIGH);       
+      } else if (radiation > RA_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+        stateRadiation = 1;        
+        //digitalWrite(RELAY_2_PIN, LOW);        
+      }
+      break;
+    
+    case -1:
+      if (radiation >= RA_IDEAL) {
+        stateRadiation = 0;
+        digitalWrite(RELAY_4_PIN, LOW);
+      }
+      break;
+    
+    case 1:
+      if (radiation <= RA_IDEAL) {
+        stateRadiation = 0;
+        //digitalWrite(RELAY_4_PIN, HIGH);        
+      }
+      break;
+  }   
+  
+  ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM
   
   long now = millis();
   if (now - lastMsg > 5000) { //120000
@@ -401,13 +439,25 @@ void loop() {
 
     Serial.println("----------");
 
-     Serial.print("UMIDADE: ");
+    Serial.print("UMIDADE: ");
     Serial.println(humidity);
 
     Serial.print("Estado: ");
     Serial.println(stateHumidity);
 
     Serial.println("----------");
+
+    Serial.print("Radiação: ");
+    Serial.println(radiation);
+
+    Serial.print("Estado: ");
+    Serial.println(stateRadiation);
+
+    Serial.println("----------");
+
+
+
+    
     
     //Serial.println(relogio_ntp(0)); 
 

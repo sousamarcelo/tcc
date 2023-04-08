@@ -50,14 +50,17 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 */
 
 //DEFINIÇÃO DE PINOS
-#define led_Pin                  19 // veio do padrao para testar o fluxo de app para o esp
-#define RELAY_1_PIN               4 // temp min
-#define RELAY_2_PIN              16 // temp max
-#define RELAY_3_PIN               2 // umidificador mini
-#define RELAY_4_PIN              17 // Iluminação min
-#define RELAY_5_PIN              15 // bomba de irrigação
-#define RADIATION_SENSOR_PIN     34 // Sensor de Radiação
-#define SOIL_MOISTURE_SENSOR_PIN 35 //sensor de umidade do solo
+#define led_Pin                   19 // veio do padrao para testar o fluxo de app para o esp
+#define RELAY_1_PIN                4 // temp min
+#define RELAY_2_PIN               16 // temp max
+#define RELAY_3_PIN                2 // umidificador mini
+#define RELAY_4_PIN               17 // Iluminação min
+#define RELAY_5_PIN               15 // bomba de irrigação
+#define RADIATION_SENSOR_PIN      34 // Sensor de Radiação
+#define SOIL_MOISTURE_SENSOR_PIN  35 //sensor de umidade do solo
+#define RES_LOW_SENSOR_PIN        32 // reservatório nivel baixo
+#define RES_HIGH_SENSOR_PIN       33 // reservatório nivel alto
+
 
 
 //DEFINIÇÕES TEMPERATURA
@@ -80,6 +83,10 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define SM_IDEAL  70   // umidade do solo ideal
 #define SM_MIN    60   // umidade do solo minimo
 
+//DEFINIÇÕES NIVEL DO RESERVATÓRIO DE AGUA
+#define RE_MAX 1
+#define RE_MIN 0
+
 #define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
 #define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
 
@@ -92,13 +99,16 @@ float temperature =  0.0;
 float humidity =     0.0;
 float radiation =    0.0;
 float soilMoisture = 0.0;
+int   reservoirLow =   0;
+int   reservoirHigh =  0;
 
 //int   dry_soil = 50;
 
-int stateTemperature = 0;  // 0 = temperatura ideal | -1 = peutier aquecimento ligado | 1 = peutier resfriamento Ligado
-int stateHumidity =    0;     // 0 = Ar ideal | -1 = Umidificador ligado | 1 = desumidificador Ligado(não utilizado)
-int stateRadiation =   0;    // 0 = radiação ideal | -1 = iluminação ligado | 1 = (não utilizado) // iluminação por sensor só para testes, depois será por horario agendado
-int statusSoilMoisture = 0;  // 0 = umidade do solo ideal | -1 = irrigação ligado | 1 = irrigação desligada
+int stateTemperature =     0; // 0 = temperatura ideal | -1 = peutier aquecimento ligado | 1 = peutier resfriamento Ligado
+int stateHumidity =        0; // 0 = Ar ideal | -1 = Umidificador ligado | 1 = desumidificador Ligado(não utilizado)
+int stateRadiation =       0; // 0 = radiação ideal | -1 = iluminação ligado | 1 = (não utilizado) // iluminação por sensor só para testes, depois será por horario agendado
+int statusSoilMoisture =   0; // 0 = umidade do solo ideal | -1 = irrigação ligado | 1 = irrigação desligada
+int statusReservoirLevel = 0; // 0 = nivel do reservatório ideal | -1 = nivel baixo do reservatório  | 1 = nivel alto do reservatório
 
 unsigned long readControl;
 
@@ -146,12 +156,12 @@ void setup() {
   pinMode(RELAY_3_PIN, OUTPUT);
   pinMode(RELAY_4_PIN, OUTPUT);
   pinMode(RELAY_5_PIN, OUTPUT);  
-  pinMode(RADIATION_SENSOR_PIN, INPUT);
+  pinMode(RADIATION_SENSOR_PIN,     INPUT);
   pinMode(SOIL_MOISTURE_SENSOR_PIN, INPUT);
-  
+  pinMode(RES_LOW_SENSOR_PIN,       INPUT);
+  pinMode(RES_HIGH_SENSOR_PIN,      INPUT);
 
   
-
   
 
   digitalWrite(RELAY_1_PIN, HIGH); // RELE DE ALTA
@@ -304,11 +314,15 @@ void loop() {
   if(millis() - readControl > READING_INTERVAL_CORE){        
     
     // Temperature in Celsius
-    temperature = bme.readTemperature();
+    temperature   = bme.readTemperature();
      // Umidade do ar
-    humidity = bme.readHumidity();
+    humidity      = bme.readHumidity();
 
-    radiation = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);    
+    radiation     = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);    
+
+    reservoirLow  =  digitalRead(RES_LOW_SENSOR_PIN);
+    
+    reservoirHigh =  digitalRead(RES_HIGH_SENSOR_PIN);       
 
     readControl = millis();
     
@@ -407,7 +421,7 @@ void loop() {
   
   switch (statusSoilMoisture) { 
     case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (soilMoisture < SM_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+      if (soilMoisture < SM_MIN && reservoirLow != RE_MIN) {             //Se Leitura Atual = Indicando solo seco.
         statusSoilMoisture = -1;
         digitalWrite(RELAY_5_PIN, HIGH);       
       } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
@@ -430,10 +444,28 @@ void loop() {
       }
       break;
   } 
-  
-
 
   ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<--- FIM
+
+  switch (statusReservoirLevel) {
+    case 0:
+    if (reservoirLow <= RE_MIN) {
+      statusReservoirLevel = -1;
+      digitalWrite(RELAY_5_PIN, LOW);
+      //comando: ligando solenoide
+    } else if (reservoirHigh >= RE_MAX) {
+      statusReservoirLevel = -1;
+    }
+    break;
+
+    case -1:
+    if (reservoirHigh >= RE_MAX) {
+      statusReservoirLevel = 0;
+      //comando: deliga solenoite
+    }
+    break;    
+  }
+  
 
 
 
@@ -490,36 +522,45 @@ void loop() {
     */
 
     Serial.print("Tempetarura: ");
-    Serial.println(temperature);
+    Serial.print(temperature);
 
-    Serial.print("Estado: ");
-    Serial.println(stateTemperature);
+    Serial.print(" - Estado: ");
+    Serial.print(stateTemperature);
 
-    Serial.println("----------");
+    Serial.print(" | UMIDADE: ");
+    Serial.print(humidity);
 
-    Serial.print("UMIDADE: ");
-    Serial.println(humidity);
+    Serial.print(" - Estado: ");
+    Serial.print(stateHumidity);
 
-    Serial.print("Estado: ");
-    Serial.println(stateHumidity);
+    Serial.print(" | Radiação: ");
+    Serial.print(radiation);
 
-    Serial.println("----------");
+    Serial.print(" - Estado: ");
+    Serial.print(stateRadiation);
 
-    Serial.print("Radiação: ");
-    Serial.println(radiation);
+    Serial.print(" | Umidade do Solo: ");
+    Serial.print(soilMoisture);
 
-    Serial.print("Estado: ");
-    Serial.println(stateRadiation);
+    Serial.print(" - Estado: ");
+    Serial.print(statusSoilMoisture);
 
-    Serial.println("----------");
+    Serial.print(" | Nivel alto reservatório: ");
+    Serial.print(reservoirHigh);
 
-    Serial.print("Umidade do Solo: ");
-    Serial.println(soilMoisture);
+    //Serial.print(" - Estado: ");
+    //Serial.print(statusReservoirLevel);
 
-    Serial.print("Estado: ");
-    Serial.println(statusSoilMoisture);
+    Serial.print(" | Nivel baixo reservatório: ");
+    Serial.print(reservoirLow);
 
-    Serial.println("----------");
+    //Serial.print(" - Estado: ");
+    //Serial.print(statusReservoirLevel);
+
+
+
+
+    //Serial.println("----------");
 
     
 

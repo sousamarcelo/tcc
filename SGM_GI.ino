@@ -507,15 +507,15 @@ void loop() {
   ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM  
   
   long now = millis();
-  if (now - lastMsg > 5000) { //120000
+  if (now - lastMsg > 10000) { //120000
     lastMsg = now;    
     
-    /*
+    
     // Convert the value to a char array //---------------------------------------->> conversão necessaria para publicação no topico
     char tempString[8];
     dtostrf(temperature, 1, 2, tempString);
-    Serial.print("Temperature: ");
-    Serial.println(tempString);
+    //Serial.print("Temperature: ");
+    //Serial.println(tempString);
     client.publish("esp32/temperature/value", tempString);
 
     
@@ -523,17 +523,18 @@ void loop() {
     // Convert the value to a char array //---------------------------------------->> conversão necessaria para publicação no topico
     char humString[8];
     dtostrf(humidity, 1, 2, humString);
-    Serial.print("Humidity: ");
-    Serial.println(humString);
+    //Serial.print("Humidity: ");
+    //Serial.println(humString);
     client.publish("esp32/humidity/value", humString);
 
     //Sensor de Umidade do solo, convertendo o valor em uma matriz de caracteres       
     char soilString[8];
-    dtostrf(soil_moisture, 1, 2, soilString);
-    Serial.print("soil Moisture: ");
-    Serial.println(soilString);
+    dtostrf(soilMoisture, 1, 2, soilString);
+    //Serial.print("soil Moisture: ");
+    //Serial.println(soilString);
     client.publish("esp32/soilMoisture/value", soilString);
 
+    /*
     //Enviando Status do sensor de nivel maximo de agua, convertendo o valor em uma matriz de caracteres    
     char pumpRelay1StatusString[8];
     dtostrf(water_pump_relay1_status, 1, 2, pumpRelay1StatusString);
@@ -553,8 +554,7 @@ void loop() {
     dtostrf(minimun_water_level_sensor_status, 1, 2, minlevelStatusString);
     Serial.print("minimun_water_level_sensor_status: ");
     Serial.println(minlevelStatusString);
-    client.publish("esp32/MaximunWaterLevelSensorStatus/value", minlevelStatusString);
- 
+    client.publish("esp32/MaximunWaterLevelSensorStatus/value", minlevelStatusString); 
     */
 
     Serial.print("Hora: ");
@@ -573,10 +573,13 @@ void loop() {
     Serial.print(stateHumidity);
 
     Serial.print(" | Radiação: ");
-    Serial.print(radiation);
+    Serial.print(radiation);    
 
     Serial.print(" - Estado: ");
     Serial.print(stateRadiation);
+
+    Serial.print(" | Iluminação: ");
+    Serial.print(stateLight);
 
     Serial.print(" | Umidade do Solo: ");
     Serial.print(soilMoisture);

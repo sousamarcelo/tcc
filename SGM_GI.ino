@@ -18,8 +18,8 @@ extern "C" {
 #include <NTPClient.h>
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
-const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
+const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
+const char* password = "amid1984"; // Gnusmas_22//amid1984
 
 
 // Add your MQTT Broker IP address, example:
@@ -109,6 +109,7 @@ int stateHumidity =        0; // 0 = Ar ideal | -1 = Umidificador ligado | 1 = d
 int stateRadiation =       0; // 0 = radiação ideal | -1 = iluminação ligado | 1 = (não utilizado) // iluminação por sensor só para testes, depois será por horario agendado
 int statusSoilMoisture =   0; // 0 = umidade do solo ideal | -1 = irrigação ligado | 1 = irrigação desligada
 int statusReservoirLevel = 0; // 0 = nivel do reservatório ideal | -1 = nivel baixo do reservatório  | 1 = nivel alto do reservatório
+int stateLight =           0;
 
 unsigned long readControl;
 
@@ -387,7 +388,9 @@ void loop() {
   } 
   ////////////////  --->> CONTROLE DA UMIDADE DO AR <<--- FIM
 
+  /*
   ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- PARA TESTES POR SENSOR
+  
   
   switch (stateRadiation) { 
     case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
@@ -413,8 +416,12 @@ void loop() {
         //digitalWrite(RELAY_4_PIN, HIGH);        
       }
       break;
-  }  
+  }
+  
+
+  
   ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM
+  */
 
   ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<---
 
@@ -465,10 +472,39 @@ void loop() {
     }
     break;    
   }
+
   
-
-
-
+  ////////////////  --->> CONTROLE DE ILUMINAÇÃO POR FAIXA HORARIA <<--- PARA TESTES POR SENSOR
+  
+  
+  switch (stateLight) {  // hora --> "1910"
+    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+      if (relogio_ntp(3) >= "0800") {             //Se Leitura Atual = Indicando tempetatura fria
+        stateRadiation = -1;
+        digitalWrite(RELAY_4_PIN, HIGH);       
+      } else if (relogio_ntp(3) <= "2000") {      ////Se Leitura Atual = Indicando tempetatura quente
+        stateRadiation = 1;        
+        digitalWrite(RELAY_4_PIN, LOW);        
+      }
+      break;
+    /*
+    case -1:
+      if (radiation >= RA_IDEAL) {
+        stateRadiation = 0;
+        digitalWrite(RELAY_4_PIN, LOW);
+      }
+      break;
+    
+    case 1:
+      if (radiation <= RA_IDEAL) {
+        stateRadiation = 0;
+        //digitalWrite(RELAY_4_PIN, HIGH);        
+      }
+      break;
+    */
+  }
+  
+  ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM  
   
   long now = millis();
   if (now - lastMsg > 5000) { //120000
@@ -521,7 +557,10 @@ void loop() {
  
     */
 
-    Serial.print("Tempetarura: ");
+    Serial.print("Hora: ");
+    Serial.print(relogio_ntp(3)); // hora --> "1910"
+
+    Serial.print(" | Tempetarura: ");
     Serial.print(temperature);
 
     Serial.print(" - Estado: ");

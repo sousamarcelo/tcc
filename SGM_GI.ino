@@ -18,8 +18,8 @@ extern "C" {
 #include <NTPClient.h>
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
-const char* password = "amid1984"; // Gnusmas_22//amid1984
+const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
+const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
 
 
 // Add your MQTT Broker IP address, example:
@@ -51,8 +51,8 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 
 //DEFINIÇÃO DE PINOS
 #define led_Pin                   19 // veio do padrao para testar o fluxo de app para o esp
-#define RELAY_1_PIN                4 // temp min
-#define RELAY_2_PIN               16 // temp max
+#define RELAY_1_PIN                4 // temp min (aquecedor)
+#define RELAY_2_PIN               16 // temp max (peutier)
 #define RELAY_3_PIN                2 // umidificador mini
 #define RELAY_4_PIN               17 // Iluminação min
 #define RELAY_5_PIN               15 // bomba de irrigação
@@ -165,11 +165,11 @@ void setup() {
   
   
 
-  digitalWrite(RELAY_1_PIN, HIGH); // RELE DE ALTA
-  digitalWrite(RELAY_2_PIN, HIGH); // RELE DE ALTA
+  digitalWrite(RELAY_1_PIN, LOW); // 
+  digitalWrite(RELAY_2_PIN, LOW); // 
   digitalWrite(RELAY_3_PIN, LOW);
-  digitalWrite(RELAY_4_PIN, LOW);
-  digitalWrite(RELAY_5_PIN, LOW); 
+  digitalWrite(RELAY_4_PIN, LOW); // rele da alta
+  digitalWrite(RELAY_5_PIN, LOW); // rele da alta
   
   
   //controlando data e hora Marcelo 25/03
@@ -319,7 +319,7 @@ void loop() {
      // Umidade do ar
     humidity      = bme.readHumidity();
 
-    radiation     = map(analogRead(RADIATION_SENSOR_PIN), 0, 4095, 100, 0);    
+    radiation     = map(analogRead(RADIATION_SENSOR_PIN), 1840, 4095, 100, 0);  // SENSOR LONGO (MOLHADO = 1840.00, SECO = 4095)  
 
     reservoirLow  =  digitalRead(RES_LOW_SENSOR_PIN);
     
@@ -336,24 +336,24 @@ void loop() {
     case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
       if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
         stateTemperature = -1;
-        digitalWrite(RELAY_1_PIN, LOW);        
+        digitalWrite(RELAY_1_PIN, HIGH);  // antes , LOW (rele de alta)       
       } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
         stateTemperature = 1;
-        digitalWrite(RELAY_2_PIN, LOW);        
+        digitalWrite(RELAY_2_PIN, HIGH); // antes RELAY_2_PIN, LOW (rele de alta)     
       }
       break;
     
     case -1:
       if (temperature >= TEMP_IDEAL) {
         stateTemperature = 0;
-        digitalWrite(RELAY_1_PIN, HIGH);
+        digitalWrite(RELAY_1_PIN, LOW); // antes , HIGH (rele de alta)   
       }
       break;
     
     case 1:
       if (temperature <= TEMP_IDEAL) {
         stateTemperature = 0;
-        digitalWrite(RELAY_2_PIN, HIGH);        
+        digitalWrite(RELAY_2_PIN, LOW); // // antes RELAY_2_PIN, HIGH (rele de alta)          
       }
       break;
   } 
@@ -428,19 +428,19 @@ void loop() {
   
   switch (statusSoilMoisture) { 
     case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (soilMoisture < SM_MIN && reservoirLow != RE_MIN) {             //Se Leitura Atual = Indicando solo seco.
+      if (soilMoisture < SM_MIN ) {             //Se Leitura Atual = Indicando solo seco. \\&& reservoirLow != RE_MIN
         statusSoilMoisture = -1;
-        digitalWrite(RELAY_5_PIN, HIGH);       
+        digitalWrite(RELAY_5_PIN, HIGH); //Rele de alta
       } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
         statusSoilMoisture = 1;        
-        //digitalWrite(RELAY_5_PIN, LOW);        
+        digitalWrite(RELAY_5_PIN, LOW);        
       }
       break;
     
     case -1:
       if (soilMoisture >= SM_IDEAL) {
         statusSoilMoisture = 0;
-        digitalWrite(RELAY_5_PIN, LOW);
+        digitalWrite(RELAY_5_PIN, LOW); //Rele de alta
       }
       break;
     

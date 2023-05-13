@@ -16,14 +16,16 @@ extern "C" {
 #include <AsyncMqttClient.h>
 #include <WiFiUDP.h>
 #include <NTPClient.h>
+#include <Ultrasonic.h> //Inclui a biblioteca do ultrassônico
+
+
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
-const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
+const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
+const char* password = "amid1984"; // Gnusmas_22//amid1984
 
 
-// Add your MQTT Broker IP address, example:
-//const char* mqtt_server = "192.168.1.144";
+// Add your MQTT Broker IP address, example://const char* mqtt_server = "192.168.1.144";
 const char* mqtt_server = "137.184.132.170";//"192.168.2.102"; 
 const char* mqttUser = "Garotas"; //----------------------------->> Marcelo 05/03 usuario mqtt
 const char* mqttPassword = "teste@12"; //----------------------------->> Marcelo 05/03 usuario mqtt
@@ -56,10 +58,14 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define RELAY_3_PIN                2 // umidificador mini
 #define RELAY_4_PIN               17 // Iluminação min
 #define RELAY_5_PIN               15 // bomba de irrigação
+#define RELAY_6_PIN                0 // SOLENOIDE
 #define RADIATION_SENSOR_PIN      34 // Sensor de Radiação
 #define SOIL_MOISTURE_SENSOR_PIN  35 //sensor de umidade do solo
 #define RES_LOW_SENSOR_PIN        32 // reservatório nivel baixo
 #define RES_HIGH_SENSOR_PIN       33 // reservatório nivel alto
+#define trigPin                   25 // trigger sensor ultrasonic
+#define echoPin                   26 // echo    sensor ultrasonic
+
 
 
 
@@ -90,6 +96,11 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define READING_INTERVAL_CORE 1000 // invelado de execução das leituras e rotinas
 #define READING_INTERVAL_INTERNET 1000 // invelado de execução das leituras e rotinas
 
+// DEFINIÇÕES DISTANCIA SENSOR ULTRASONIC
+Ultrasonic ultrassom(trigPin, echoPin); // instanciando objeto HCSR04 (trig pin, echo pin)
+#define UDISTANCE_MAX   5 // nivel maximo do reservatório // 12 nos teste de casa
+#define UDISTANCE_MIN   3 // nivel minimos do reservatório
+
 
 //Instancia Objetos
 Adafruit_BME280 bme; // I2C
@@ -101,6 +112,7 @@ float radiation =    0.0;
 float soilMoisture = 0.0;
 int   reservoirLow =   0;
 int   reservoirHigh =  0;
+long  distance; //SENSOR UNTRASONIC: cria a variável distancia do tipo long
 
 //int   dry_soil = 50;
 
@@ -110,8 +122,11 @@ int stateRadiation =       0; // 0 = radiação ideal | -1 = iluminação ligado
 int statusSoilMoisture =   0; // 0 = umidade do solo ideal | -1 = irrigação ligado | 1 = irrigação desligada
 int statusReservoirLevel = 0; // 0 = nivel do reservatório ideal | -1 = nivel baixo do reservatório  | 1 = nivel alto do reservatório
 int stateLight =           0;
+int stateUltrasonic =      0; // distancia sensor ultrasoic: -1 nivel baixo | 1 nivel maximo
 
-unsigned long readControl;
+// VARIAVEIS PARA CONTROLES DIVERSOS
+unsigned long readControl; // CONTROLA TEMPO 
+
 
 //controlando data e hora Marcelo 25/03
 WiFiUDP udp;
@@ -156,7 +171,8 @@ void setup() {
   pinMode(RELAY_2_PIN, OUTPUT);
   pinMode(RELAY_3_PIN, OUTPUT);
   pinMode(RELAY_4_PIN, OUTPUT);
-  pinMode(RELAY_5_PIN, OUTPUT);  
+  pinMode(RELAY_5_PIN, OUTPUT);
+  pinMode(RELAY_6_PIN, OUTPUT);  
   pinMode(RADIATION_SENSOR_PIN,     INPUT);
   pinMode(SOIL_MOISTURE_SENSOR_PIN, INPUT);
   pinMode(RES_LOW_SENSOR_PIN,       INPUT);
@@ -169,7 +185,8 @@ void setup() {
   digitalWrite(RELAY_2_PIN, LOW); // 
   digitalWrite(RELAY_3_PIN, LOW);
   digitalWrite(RELAY_4_PIN, LOW); // rele da alta
-  digitalWrite(RELAY_5_PIN, LOW); // rele da alta
+  digitalWrite(RELAY_5_PIN, LOW); // rele duplo (rele da alta)
+  digitalWrite(RELAY_6_PIN, LOW); // rele duplo
   
   
   //controlando data e hora Marcelo 25/03
@@ -300,7 +317,7 @@ void calculateSoilMoisture(){
     sensorReading += analogRead(SOIL_MOISTURE_SENSOR_PIN);
   }
   sensorReading /= 10.0;
-  soilMoisture = map(sensorReading, 360, 4095, 100, 0);
+  soilMoisture = map(sensorReading, 1600, 4095, 100, 0);  //sensorReading, 360, 4095, 100, 0
 }
 
 void loop() { 
@@ -311,198 +328,234 @@ void loop() {
   client.loop();  
   calculateSoilMoisture();
 
-//Controle de leitura dos sensores  
+  //Controle de leitura dos sensores 
+
+  
   if(millis() - readControl > READING_INTERVAL_CORE){        
     
-    // Temperature in Celsius
-    temperature   = bme.readTemperature();
-     // Umidade do ar
-    humidity      = bme.readHumidity();
+      
+      temperature   = bme.readTemperature(); // Temperature in Celsius
+      
+      humidity      = bme.readHumidity(); // Umidade do ar
 
-    radiation     = map(analogRead(RADIATION_SENSOR_PIN), 1840, 4095, 100, 0);  // SENSOR LONGO (MOLHADO = 1840.00, SECO = 4095)  
+      radiation     = map(analogRead(RADIATION_SENSOR_PIN), 1840, 4095, 100, 0);  // SENSOR LONGO (MOLHADO = 1840.00, SECO = 4095)  
 
-    reservoirLow  =  digitalRead(RES_LOW_SENSOR_PIN);
+      reservoirLow  =  digitalRead(RES_LOW_SENSOR_PIN);
+      
+      reservoirHigh =  digitalRead(RES_HIGH_SENSOR_PIN);       
+
+      distance      = ultrassom.read(CM);//ultrassom.Ranging(CM) retorna a distancia em centímetros(CM)
+
+      readControl   = millis();
+      
+      //Serial.println("Sensores lidos com sucesso"); debug
     
-    reservoirHigh =  digitalRead(RES_HIGH_SENSOR_PIN);       
-
-    readControl = millis();
     
-    //Serial.println("Sensores lidos com sucesso"); debug
-  }
+          
 
-  ////////////////  --->> CONTROLE DA TEMPERATURA <<---
-   //ATENÇÃO! RELE DUPLOS COM ACIONAMENTO INVETIDOS PARA CONTROLE DE TEMPERATURA
-  switch (stateTemperature) {
-    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
-        stateTemperature = -1;
-        digitalWrite(RELAY_1_PIN, HIGH);  // antes , LOW (rele de alta)       
-      } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-        stateTemperature = 1;
-        digitalWrite(RELAY_2_PIN, HIGH); // antes RELAY_2_PIN, LOW (rele de alta)     
-      }
-      break;
-    
-    case -1:
-      if (temperature >= TEMP_IDEAL) {
-        stateTemperature = 0;
-        digitalWrite(RELAY_1_PIN, LOW); // antes , HIGH (rele de alta)   
-      }
-      break;
-    
-    case 1:
-      if (temperature <= TEMP_IDEAL) {
-        stateTemperature = 0;
-        digitalWrite(RELAY_2_PIN, LOW); // // antes RELAY_2_PIN, HIGH (rele de alta)          
-      }
-      break;
-  } 
+      ////////////////  --->> CONTROLE DA TEMPERATURA <<---
+    //ATENÇÃO! RELE DUPLOS COM ACIONAMENTO INVETIDOS PARA CONTROLE DE TEMPERATURA
+    switch (stateTemperature) {
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+          stateTemperature = -1;
+          digitalWrite(RELAY_1_PIN, HIGH);  // antes , LOW (rele de alta)       
+        } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+          stateTemperature = 1;
+          digitalWrite(RELAY_2_PIN, HIGH); // antes RELAY_2_PIN, LOW (rele de alta)     
+        }
+        break;
+      
+      case -1:
+        if (temperature >= TEMP_IDEAL) {
+          stateTemperature = 0;
+          digitalWrite(RELAY_1_PIN, LOW); // antes , HIGH (rele de alta)   
+        }
+        break;
+      
+      case 1:
+        if (temperature <= TEMP_IDEAL) {
+          stateTemperature = 0;
+          digitalWrite(RELAY_2_PIN, LOW); // // antes RELAY_2_PIN, HIGH (rele de alta)          
+        }
+        break;
+    } 
 
-  ////////////////  --->> CONTROLE DA TEMPERATURA <<--- FIM
+    ////////////////  --->> CONTROLE DA TEMPERATURA <<--- FIM
 
-  ////////////////  --->> CONTROLE DA UMIDADE DO AR <<---  obs só para baixa umidade  
-  switch (stateHumidity) { 
-    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
-        stateHumidity = -1;
-        digitalWrite(RELAY_3_PIN, HIGH);       
-      } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-        stateHumidity = 1;        
-        //digitalWrite(RELAY_2_PIN, LOW);        
-      }
-      break;
-    
-    case -1:
-      if (humidity >= UR_IDEAL) {
-        stateHumidity = 0;
-        digitalWrite(RELAY_3_PIN, LOW);
-      }
-      break;
-    
-    case 1:
-      if (humidity <= UR_IDEAL) {
-        stateHumidity = 0;
-        //digitalWrite(RELAY_2_PIN, HIGH);        
-      }
-      break;
-  } 
-  ////////////////  --->> CONTROLE DA UMIDADE DO AR <<--- FIM
+    ////////////////  --->> CONTROLE DA UMIDADE DO AR <<---  obs só para baixa umidade  
+    switch (stateHumidity) { 
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+          stateHumidity = -1;
+          digitalWrite(RELAY_3_PIN, HIGH);       
+        } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+          stateHumidity = 1;        
+          //digitalWrite(RELAY_2_PIN, LOW);        
+        }
+        break;
+      
+      case -1:
+        if (humidity >= UR_IDEAL) {
+          stateHumidity = 0;
+          digitalWrite(RELAY_3_PIN, LOW);
+        }
+        break;
+      
+      case 1:
+        if (humidity <= UR_IDEAL) {
+          stateHumidity = 0;
+          //digitalWrite(RELAY_2_PIN, HIGH);        
+        }
+        break;
+    } 
+    ////////////////  --->> CONTROLE DA UMIDADE DO AR <<--- FIM
 
-  /*
-  ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- PARA TESTES POR SENSOR
-  
-  
-  switch (stateRadiation) { 
-    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (radiation < RA_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
-        stateRadiation = -1;
-        digitalWrite(RELAY_4_PIN, HIGH);       
-      } else if (radiation > RA_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-        stateRadiation = 1;        
-        //digitalWrite(RELAY_2_PIN, LOW);        
-      }
-      break;
-    
-    case -1:
-      if (radiation >= RA_IDEAL) {
-        stateRadiation = 0;
-        digitalWrite(RELAY_4_PIN, LOW);
-      }
-      break;
-    
-    case 1:
-      if (radiation <= RA_IDEAL) {
-        stateRadiation = 0;
-        //digitalWrite(RELAY_4_PIN, HIGH);        
-      }
-      break;
-  }
-  
-
-  
-  ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM
-  */
-
-  ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<---
-
-  
-  switch (statusSoilMoisture) { 
-    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (soilMoisture < SM_MIN ) {             //Se Leitura Atual = Indicando solo seco. \\&& reservoirLow != RE_MIN
-        statusSoilMoisture = -1;
-        digitalWrite(RELAY_5_PIN, HIGH); //Rele de alta
-      } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-        statusSoilMoisture = 1;        
-        digitalWrite(RELAY_5_PIN, LOW);        
-      }
-      break;
-    
-    case -1:
-      if (soilMoisture >= SM_IDEAL) {
-        statusSoilMoisture = 0;
-        digitalWrite(RELAY_5_PIN, LOW); //Rele de alta
-      }
-      break;
-    
-    case 1:
-      if (soilMoisture <= SM_IDEAL) {
-        statusSoilMoisture = 0;
-        //digitalWrite(RELAY_5_PIN, HIGH);        
-      }
-      break;
-  } 
-
-  ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<--- FIM
-
-  switch (statusReservoirLevel) {
-    case 0:
-    if (reservoirLow <= RE_MIN) {
-      statusReservoirLevel = -1;
-      digitalWrite(RELAY_5_PIN, LOW);
-      //comando: ligando solenoide
-    } else if (reservoirHigh >= RE_MAX) {
-      statusReservoirLevel = -1;
-    }
-    break;
-
-    case -1:
-    if (reservoirHigh >= RE_MAX) {
-      statusReservoirLevel = 0;
-      //comando: deliga solenoite
-    }
-    break;    
-  }
-
-  
-  ////////////////  --->> CONTROLE DE ILUMINAÇÃO POR FAIXA HORARIA <<--- PARA TESTES POR SENSOR
-  
-  
-  switch (stateLight) {  // hora --> "1910"
-    case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-      if (relogio_ntp(3) >= "0800") {             //Se Leitura Atual = Indicando tempetatura fria
-        stateRadiation = -1;
-        digitalWrite(RELAY_4_PIN, HIGH);       
-      } else if (relogio_ntp(3) <= "2000") {      ////Se Leitura Atual = Indicando tempetatura quente
-        stateRadiation = 1;        
-        digitalWrite(RELAY_4_PIN, LOW);        
-      }
-      break;
     /*
-    case -1:
-      if (radiation >= RA_IDEAL) {
-        stateRadiation = 0;
-        digitalWrite(RELAY_4_PIN, LOW);
-      }
-      break;
+    ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- PARA TESTES POR SENSOR
     
-    case 1:
-      if (radiation <= RA_IDEAL) {
-        stateRadiation = 0;
-        //digitalWrite(RELAY_4_PIN, HIGH);        
+    
+    switch (stateRadiation) { 
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (radiation < RA_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+          stateRadiation = -1;
+          digitalWrite(RELAY_4_PIN, HIGH);       
+        } else if (radiation > RA_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+          stateRadiation = 1;        
+          //digitalWrite(RELAY_2_PIN, LOW);        
+        }
+        break;
+      
+      case -1:
+        if (radiation >= RA_IDEAL) {
+          stateRadiation = 0;
+          digitalWrite(RELAY_4_PIN, LOW);
+        }
+        break;
+      
+      case 1:
+        if (radiation <= RA_IDEAL) {
+          stateRadiation = 0;
+          //digitalWrite(RELAY_4_PIN, HIGH);        
+        }
+        break;
+    }
+    
+
+    
+    ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM
+    */
+
+    ////////////////  --->> CONTROLE DE RESERVATÓRIO COM SENSOR ULTRASONIC
+    switch (stateUltrasonic) { 
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (distance >= UDISTANCE_MAX ) {             //distancia maxi do sensor, ou seja nivel minimo
+          stateUltrasonic = -1;
+          digitalWrite(RELAY_6_PIN, HIGH); //Rele de alta
+        } else if (distance <= UDISTANCE_MIN) {      ////
+          stateUltrasonic = 0; //1;        
+          digitalWrite(RELAY_6_PIN, LOW);  //Rele de alta       
+        }
+        break;
+      
+      case -1:
+        if (distance <= UDISTANCE_MIN) {
+          stateUltrasonic = 0;
+          digitalWrite(RELAY_6_PIN, LOW); //Rele de alta
+        }
+        break;
+      /*
+      case 1:
+        if (distance >= UDISTANCE_MIN) {
+          stateUltrasonic = 0;
+          //digitalWrite(R*RELE SOLENOID DESLIGA); //Rele de alta       
+        }
+        break;
+      */
+    } 
+
+    ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<---
+
+    
+    switch (statusSoilMoisture) { 
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (soilMoisture < SM_MIN && stateUltrasonic != -1 ) {             //Se Leitura Atual = Indicando solo seco. \\&& reservoirLow != RE_MIN
+          statusSoilMoisture = -1;
+          digitalWrite(RELAY_5_PIN, HIGH); //Rele de alta
+        } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+          statusSoilMoisture = 1;        
+          digitalWrite(RELAY_5_PIN, LOW);        
+        }
+        break;
+      
+      case -1:
+        if (soilMoisture >= SM_IDEAL || stateUltrasonic == -1 ) {
+          statusSoilMoisture = 0;
+          digitalWrite(RELAY_5_PIN, LOW); //Rele de alta
+        }
+        break;
+      
+      case 1:
+        if (soilMoisture <= SM_IDEAL) {
+          statusSoilMoisture = 0;
+          //digitalWrite(RELAY_5_PIN, HIGH);        
+        }
+        break;
+    } 
+
+    ////////////////  --->> CONTROLE DE UMUDADE DO SOLO <<--- FIM
+
+    switch (statusReservoirLevel) {
+      case 0:
+      if (reservoirLow <= RE_MIN) {
+        statusReservoirLevel = -1;
+        digitalWrite(RELAY_5_PIN, LOW);
+        //comando: ligando solenoide
+      } else if (reservoirHigh >= RE_MAX) {
+        statusReservoirLevel = -1;
       }
       break;
-    */
-  }
+
+      case -1:
+      if (reservoirHigh >= RE_MAX) {
+        statusReservoirLevel = 0;
+        //comando: deliga solenoite
+      }
+      break;    
+    }
+
+    
+    ////////////////  --->> CONTROLE DE ILUMINAÇÃO POR FAIXA HORARIA <<--- PARA TESTES POR SENSOR
+    
+    
+    switch (stateLight) {  // hora --> "1910"
+      case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
+        if (relogio_ntp(3) >= "0800") {             //Se Leitura Atual = Indicando tempetatura fria
+          stateRadiation = -1;
+          digitalWrite(RELAY_4_PIN, HIGH);       
+        } else if (relogio_ntp(3) <= "2000") {      ////Se Leitura Atual = Indicando tempetatura quente
+          stateRadiation = 1;        
+          digitalWrite(RELAY_4_PIN, LOW);        
+        }
+        break;
+      /*
+      case -1:
+        if (radiation >= RA_IDEAL) {
+          stateRadiation = 0;
+          digitalWrite(RELAY_4_PIN, LOW);
+        }
+        break;
+      
+      case 1:
+        if (radiation <= RA_IDEAL) {
+          stateRadiation = 0;
+          //digitalWrite(RELAY_4_PIN, HIGH);        
+        }
+        break;
+      */
+    }
+
+  }  
   
   ////////////////  --->> CONTROLE DE ILUMINAÇÃO <<--- FIM  
   
@@ -587,14 +640,14 @@ void loop() {
     Serial.print(" - Estado: ");
     Serial.print(statusSoilMoisture);
 
-    Serial.print(" | Nivel alto reservatório: ");
-    Serial.print(reservoirHigh);
+    Serial.print(" | Nivel do reservatório: ");
+    Serial.print(distance);
+
+    Serial.print(" - Estado: ");
+    Serial.print(stateUltrasonic);
 
     //Serial.print(" - Estado: ");
     //Serial.print(statusReservoirLevel);
-
-    Serial.print(" | Nivel baixo reservatório: ");
-    Serial.print(reservoirLow);
 
     //Serial.print(" - Estado: ");
     //Serial.print(statusReservoirLevel);

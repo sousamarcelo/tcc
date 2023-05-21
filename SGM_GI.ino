@@ -21,8 +21,8 @@ extern "C" {
 
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
-const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
+const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
+const char* password = "amid1984"; // Gnusmas_22//amid1984
 
 
 // Add your MQTT Broker IP address, example://const char* mqtt_server = "192.168.1.144";
@@ -59,8 +59,11 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define RELAY_4_PIN               17 // Iluminação min
 #define RELAY_5_PIN               15 // bomba de irrigação
 #define RELAY_6_PIN                0 // SOLENOIDE
+#define RELAY_7_PIN               23 // Fan Auxiliar resfriamento
 #define RADIATION_SENSOR_PIN      34 // Sensor de Radiação
-#define SOIL_MOISTURE_SENSOR_PIN  35 //sensor de umidade do solo
+#define SOIL_MOISTURE_SENSOR_PIN  35 // sensor de umidade do solo
+#define SOIL_MOISTURE_SENSOR2_PIN 14 // sensor de umidade do solo 2 (em dev)
+#define SOIL_MOISTURE_SENSOR3_PIN 27 // sensor de umidade do solo 3 (em dev)
 #define RES_LOW_SENSOR_PIN        32 // reservatório nivel baixo
 #define RES_HIGH_SENSOR_PIN       33 // reservatório nivel alto
 #define trigPin                   25 // trigger sensor ultrasonic
@@ -125,7 +128,8 @@ int stateLight =           0;
 int stateUltrasonic =      0; // distancia sensor ultrasoic: -1 nivel baixo | 1 nivel maximo
 
 // VARIAVEIS PARA CONTROLES DIVERSOS
-unsigned long readControl; // CONTROLA TEMPO 
+unsigned long readControl; // CONTROLA TEMPO
+ unsigned long readControlPeltier; // Controle de tempo de acionamento Fan x Peltier
 
 
 //controlando data e hora Marcelo 25/03
@@ -173,20 +177,23 @@ void setup() {
   pinMode(RELAY_4_PIN, OUTPUT);
   pinMode(RELAY_5_PIN, OUTPUT);
   pinMode(RELAY_6_PIN, OUTPUT);  
-  pinMode(RADIATION_SENSOR_PIN,     INPUT);
-  pinMode(SOIL_MOISTURE_SENSOR_PIN, INPUT);
-  pinMode(RES_LOW_SENSOR_PIN,       INPUT);
-  pinMode(RES_HIGH_SENSOR_PIN,      INPUT);
+  pinMode(RELAY_7_PIN, OUTPUT);
+  pinMode(RADIATION_SENSOR_PIN,      INPUT);
+  pinMode(SOIL_MOISTURE_SENSOR_PIN,  INPUT);
+  pinMode(SOIL_MOISTURE_SENSOR2_PIN, INPUT);
+  pinMode(RES_LOW_SENSOR_PIN,        INPUT);
+  pinMode(RES_HIGH_SENSOR_PIN,       INPUT);
 
   
   
 
-  digitalWrite(RELAY_1_PIN, LOW); // 
-  digitalWrite(RELAY_2_PIN, LOW); // 
-  digitalWrite(RELAY_3_PIN, LOW);
-  digitalWrite(RELAY_4_PIN, LOW); // rele da alta
+  digitalWrite(RELAY_1_PIN, HIGH); // 
+  digitalWrite(RELAY_2_PIN, HIGH); // 
+  digitalWrite(RELAY_3_PIN, HIGH);
+  digitalWrite(RELAY_4_PIN, HIGH); // rele da alta
   digitalWrite(RELAY_5_PIN, HIGH); // rele duplo (rele da alta)
   digitalWrite(RELAY_6_PIN, HIGH); // rele duplo
+  digitalWrite(RELAY_7_PIN, HIGH);
   
   
   //controlando data e hora Marcelo 25/03
@@ -315,8 +322,9 @@ void calculateSoilMoisture(){
   float sensorReading = 0.0;
   for (int i = 0; i < 10; i++) {
     sensorReading += analogRead(SOIL_MOISTURE_SENSOR_PIN);
+    sensorReading += analogRead(SOIL_MOISTURE_SENSOR2_PIN); // Marcelo 20/05/23
   }
-  sensorReading = sensorReading/10;
+  sensorReading = sensorReading/20;
   soilMoisture = map(sensorReading, 1300, 4095, 100, 0);  //map(sensorReading, 1600, 4095, 100, 0);//sensorReading, 360, 4095, 100, 0
 }
 
@@ -356,19 +364,24 @@ void loop() {
     //ATENÇÃO! RELE DUPLOS COM ACIONAMENTO INVETIDOS PARA CONTROLE DE TEMPERATURA
     switch (stateTemperature) {
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-        if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura baixa
           stateTemperature = -1;
-          digitalWrite(RELAY_1_PIN, LOW);  // antes , LOW (rele de alta)       
-        } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
-          stateTemperature = 1;
-          digitalWrite(RELAY_2_PIN, LOW); // antes RELAY_2_PIN, LOW (rele de alta)     
+          digitalWrite(RELAY_1_PIN, LOW);  //      
+        } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente          
+          digitalWrite(RELAY_7_PIN, LOW);
+          if(millis() - readControlPeltier > 5000){ //retarda tempo para que peltier acione depois de 5 segundos do funcionamento do Fam
+            stateTemperature = 1;
+            digitalWrite(RELAY_2_PIN, LOW); // 
+            readControlPeltier   = millis();
+          }    
         }
         break;
       
       case -1:
         if (temperature >= TEMP_IDEAL) {
           stateTemperature = 0;
-          digitalWrite(RELAY_1_PIN, HIGH); // antes , HIGH (rele de alta)   
+          digitalWrite(RELAY_1_PIN, HIGH); // antes , HIGH (rele de alta)
+          digitalWrite(RELAY_7_PIN, HIGH); // desliga o Fan junto com o paltier 
         }
         break;
       
@@ -384,10 +397,10 @@ void loop() {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  --->> CONTROLE DA UMIDADE DO AR <<---  obs só para baixa umidade  
     switch (stateHumidity) { 
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-        if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando tempetatura fria
+        if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando umidade baixa
           stateHumidity = -1;
-          digitalWrite(RELAY_3_PIN, LOW);       
-        } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
+          digitalWrite(RELAY_3_PIN, LOW);     
+        } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando umidade alta
           stateHumidity = 1;        
           //digitalWrite(RELAY_2_PIN, LOW);        
         }

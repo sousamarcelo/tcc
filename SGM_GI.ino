@@ -21,8 +21,8 @@ extern "C" {
 
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
-const char* password = "amid1984"; // Gnusmas_22//amid1984
+const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
+const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
 
 
 // Add your MQTT Broker IP address, example://const char* mqtt_server = "192.168.1.144";
@@ -129,7 +129,7 @@ int stateUltrasonic =      0; // distancia sensor ultrasoic: -1 nivel baixo | 1 
 
 // VARIAVEIS PARA CONTROLES DIVERSOS
 unsigned long readControl; // CONTROLA TEMPO
- unsigned long readControlPeltier; // Controle de tempo de acionamento Fan x Peltier
+int count_read_peltier = 0; // Controle de tempo de acionamento Fan x Peltier
 
 
 //controlando data e hora Marcelo 25/03
@@ -187,13 +187,13 @@ void setup() {
   
   
 
-  digitalWrite(RELAY_1_PIN, HIGH); // 
-  digitalWrite(RELAY_2_PIN, HIGH); // 
-  digitalWrite(RELAY_3_PIN, HIGH);
-  digitalWrite(RELAY_4_PIN, HIGH); // rele da alta
-  digitalWrite(RELAY_5_PIN, HIGH); // rele duplo (rele da alta)
-  digitalWrite(RELAY_6_PIN, HIGH); // rele duplo
-  digitalWrite(RELAY_7_PIN, HIGH);
+  digitalWrite(RELAY_1_PIN, LOW); // 
+  digitalWrite(RELAY_2_PIN, LOW); // 
+  digitalWrite(RELAY_3_PIN, LOW);
+  digitalWrite(RELAY_4_PIN, LOW); // rele da alta
+  digitalWrite(RELAY_5_PIN, LOW); // rele duplo (rele da alta)
+  digitalWrite(RELAY_6_PIN, LOW); // rele duplo
+  digitalWrite(RELAY_7_PIN, LOW);
   
   
   //controlando data e hora Marcelo 25/03
@@ -322,9 +322,10 @@ void calculateSoilMoisture(){
   float sensorReading = 0.0;
   for (int i = 0; i < 10; i++) {
     sensorReading += analogRead(SOIL_MOISTURE_SENSOR_PIN);
-    sensorReading += analogRead(SOIL_MOISTURE_SENSOR2_PIN); // Marcelo 20/05/23
+    //sensorReading += analogRead(SOIL_MOISTURE_SENSOR2_PIN); // Marcelo 20/05/23
   }
-  sensorReading = sensorReading/20;
+  
+  sensorReading = sensorReading/10;
   soilMoisture = map(sensorReading, 1300, 4095, 100, 0);  //map(sensorReading, 1600, 4095, 100, 0);//sensorReading, 360, 4095, 100, 0
 }
 
@@ -353,7 +354,7 @@ void loop() {
       
       //reservoirHigh =  digitalRead(RES_HIGH_SENSOR_PIN);       
 
-      distance      = 4;//ultrassom.read(CM);//ultrassom.Ranging(CM) retorna a distancia em centímetros(CM)     
+      distance      = ultrassom.read(CM);//ultrassom.Ranging(CM) retorna a distancia em centímetros(CM)  //4 --> chumba teste//   
       
       //Serial.println("Sensores lidos com sucesso"); debug
     
@@ -366,29 +367,34 @@ void loop() {
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
         if (temperature < TEMP_MIN) {             //Se Leitura Atual = Indicando tempetatura baixa
           stateTemperature = -1;
-          digitalWrite(RELAY_1_PIN, LOW);  //      
+          digitalWrite(RELAY_1_PIN, HIGH);  //      
         } else if (temperature > TEMP_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente          
-          digitalWrite(RELAY_7_PIN, LOW);
-          if(millis() - readControlPeltier > 5000){ //retarda tempo para que peltier acione depois de 5 segundos do funcionamento do Fam
+          digitalWrite(RELAY_7_PIN, HIGH);
+          stateTemperature = 0;
+          count_read_peltier++;
+          Serial.println(count_read_peltier);
+          if(count_read_peltier > 5){ //retarda tempo para que peltier acione depois de 5 segundos do funcionamento do Fam      //readControlPeltier       
+            digitalWrite(RELAY_2_PIN, HIGH); // 
+            Serial.println(count_read_peltier);
+            count_read_peltier = 0;
             stateTemperature = 1;
-            digitalWrite(RELAY_2_PIN, LOW); // 
-            readControlPeltier   = millis();
-          }    
+          }           
+             
         }
         break;
       
       case -1:
         if (temperature >= TEMP_IDEAL) {
           stateTemperature = 0;
-          digitalWrite(RELAY_1_PIN, HIGH); // antes , HIGH (rele de alta)
-          digitalWrite(RELAY_7_PIN, HIGH); // desliga o Fan junto com o paltier 
+          digitalWrite(RELAY_1_PIN, LOW); // antes , HIGH (rele de alta)          
         }
         break;
       
-      case 1:
+      case 1:           
         if (temperature <= TEMP_IDEAL) {
           stateTemperature = 0;
-          digitalWrite(RELAY_2_PIN, HIGH); // // antes RELAY_2_PIN, HIGH (rele de alta)          
+          digitalWrite(RELAY_2_PIN, LOW); // // antes RELAY_2_PIN, HIGH (rele de alta)
+          digitalWrite(RELAY_7_PIN, LOW); // desliga o Fan junto com o paltier           
         }
         break;
     }
@@ -399,7 +405,7 @@ void loop() {
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
         if (humidity < UR_MIN) {             //Se Leitura Atual = Indicando umidade baixa
           stateHumidity = -1;
-          digitalWrite(RELAY_3_PIN, LOW);     
+          digitalWrite(RELAY_3_PIN, HIGH);     
         } else if (humidity > UR_MAX) {      ////Se Leitura Atual = Indicando umidade alta
           stateHumidity = 1;        
           //digitalWrite(RELAY_2_PIN, LOW);        
@@ -409,7 +415,7 @@ void loop() {
       case -1:
         if (humidity >= UR_IDEAL) {
           stateHumidity = 0;
-          digitalWrite(RELAY_3_PIN, HIGH);
+          digitalWrite(RELAY_3_PIN, LOW);
         }
         break;
       
@@ -463,11 +469,11 @@ void loop() {
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
         if (distance >= UDISTANCE_MAX ) {             //distancia maxi do sensor, ou seja nivel minimo
           stateUltrasonic = -1;
-          digitalWrite(RELAY_6_PIN, LOW); //Rele de alta
+          digitalWrite(RELAY_6_PIN, HIGH); //Rele de alta
           //digitalWrite(RELAY_5_PIN, HIGH);
         } else if (distance <= UDISTANCE_MIN) {      ////
           stateUltrasonic = 1; //1;        
-          digitalWrite(RELAY_6_PIN, HIGH);  //Rele de alta       
+          digitalWrite(RELAY_6_PIN, LOW);  //Rele de alta       
         }
         break;
       
@@ -480,8 +486,8 @@ void loop() {
       
       case 1:
         if (distance <= UDISTANCE_MIN) {
-          stateUltrasonic = 1;
-          digitalWrite(RELAY_6_PIN, HIGH);      
+          stateUltrasonic = 0;
+          digitalWrite(RELAY_6_PIN, LOW);      
         }
         break;      
     } 
@@ -497,17 +503,17 @@ void loop() {
         case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
           if (soilMoisture < SM_MIN && stateUltrasonic != -1)  {        //Se Leitura Atual = Indicando solo seco. \\&& reservoirLow != RE_MIN            
             statusSoilMoisture = -1;
-            digitalWrite(RELAY_5_PIN, LOW); //Rele de alta            
+            digitalWrite(RELAY_5_PIN, HIGH); //Rele de alta            
           } else if (soilMoisture > SM_MAX) {      ////Se Leitura Atual = Indicando tempetatura quente
             statusSoilMoisture = 1;        
-            digitalWrite(RELAY_5_PIN, HIGH);        
+            digitalWrite(RELAY_5_PIN, LOW);        
           }
           break;
         
         case -1:
           if (soilMoisture >= SM_IDEAL || stateUltrasonic == -1) {
             statusSoilMoisture = 0;
-            digitalWrite(RELAY_5_PIN, HIGH); //Rele de alta
+            digitalWrite(RELAY_5_PIN, LOW); //Rele de alta
           }
           break;
         
@@ -547,31 +553,32 @@ void loop() {
     
     switch (stateLight) {  // hora --> "1910"
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-        if (relogio_ntp(3) >= "0800") {             //Se Leitura Atual = Indicando tempetatura fria
+        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "2200") {             // ligar as 0800, deliga as 2000
           stateLight = -1;
           digitalWrite(RELAY_4_PIN, LOW);       
-        } else if (relogio_ntp(3) <= "2000") {      ////Se Leitura Atual = Indicando tempetatura quente
+        } else if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "2200") {      ////Se Leitura Atual = Indicando tempetatura quente
           stateLight = 1;        
           digitalWrite(RELAY_4_PIN, HIGH);        
         }
         break;
-      /*
+      
       case -1:
-        if (radiation >= RA_IDEAL) {
-          stateRadiation = 0;
-          digitalWrite(RELAY_4_PIN, LOW);
+        if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "2200") {
+          stateLight = 1;
+          digitalWrite(RELAY_4_PIN, HIGH);
         }
         break;
       
       case 1:
-        if (radiation <= RA_IDEAL) {
-          stateRadiation = 0;
-          //digitalWrite(RELAY_4_PIN, HIGH);        
+        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "2000") {
+          stateLight = -1;
+          digitalWrite(RELAY_4_PIN, LOW);        
         }
         break;
-      */
+      
     }
 
+    
     readControl   = millis();
   }  
   
@@ -629,47 +636,37 @@ void loop() {
     */
 
     
-    Serial.print("Hora: ");
-    Serial.print(relogio_ntp(3)); // hora --> "1910"
+    Serial.print("Hora ------------- ");    
+    Serial.println(relogio_ntp(3)); // hora --> "1910"
 
-    Serial.print(" | Radiação: ");
-    Serial.print(radiation);    
+    Serial.print("Radiação --------- ");
+    Serial.print(radiation); 
+    Serial.print(",  stateLight: ");  
+    Serial.println(stateLight); 
 
-    if (stateLight == -1) {
-      Serial.print(" Iluminação ligada |");      
-    }
-
-    Serial.print(" | Tempetarura: ");
+    Serial.print("Tempetarura ------ ");
     Serial.print(temperature);
-    if (stateTemperature == -1) {
-      Serial.print(" - Aquecimento ligrado |");
-    } else if (stateTemperature = 1) {            
-        Serial.print(" - Resfriamento ligrado |");
-    }
+    Serial.print(", stateTemperature: ");
+    Serial.println(stateTemperature);   
 
-    Serial.print(" | UMIDADE: ");
+    Serial.print("Umidade do Ar ---- ");
     Serial.print(humidity);
-    if (stateHumidity == -1) {      
-      Serial.print(" - Umidificado ligado |");
-    }
+    Serial.print(", stateHumidity: ");
+    Serial.println(stateHumidity);
 
-    Serial.print(" | Umidade do Solo: ");
-    Serial.print(soilMoisture);     
+    Serial.print("Umidade do Solo -- ");
+    Serial.print(soilMoisture);
+    Serial.print(", statusSoilMoisture: ");     
+    Serial.println(statusSoilMoisture);
     
-    if (statusSoilMoisture == -1 && stateUltrasonic != -1) {
-      Serial.print(" - Irrigação Ligada |");      
-    }
-
-    Serial.print(" | Reservatório: ");
+    Serial.print("Sonar distancia -- ");
     Serial.print(distance);
+    Serial.print(", stateUltrasonic: ");
+    Serial.println(stateUltrasonic);
 
-    if (stateUltrasonic == -1) {
-      Serial.print(" - Reservatório nivel Baixo: ");    
-      Serial.print(" Solenoide Ligada |");   
-    } else if (stateUltrasonic == 1) {
-        Serial.print(" - Reservatório nivel Maximo: ");    
-        Serial.print(" Solenoide deligada |"); 
-    }
+    Serial.println();
+
+    Serial.println(" ----------------- ");
 
     /*
     Serial.print(" | Nivel do reservatório: ");

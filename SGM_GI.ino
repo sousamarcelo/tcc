@@ -21,8 +21,8 @@ extern "C" {
 
 
 // Replace the next variables with your SSID/Password combination 
-const char* ssid = "Tenda_DE5890"; // Tenda_DE5890//SILAG
-const char* password = "Gnusmas_22"; // Gnusmas_22//amid1984
+const char* ssid = "SILAG"; // Tenda_DE5890//SILAG
+const char* password = "amid1984"; // Gnusmas_22//amid1984
 
 
 // Add your MQTT Broker IP address, example://const char* mqtt_server = "192.168.1.144";
@@ -52,13 +52,13 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 */
 
 //DEFINIÇÃO DE PINOS
-#define led_Pin                   19 // veio do padrao para testar o fluxo de app para o esp
+#define led_Pin                   12 // veio do padrao para testar o fluxo de app para o esp
 #define RELAY_1_PIN                4 // temp min (aquecedor)
 #define RELAY_2_PIN               16 // temp max (peutier)
 #define RELAY_3_PIN                2 // umidificador mini
 #define RELAY_4_PIN               17 // Iluminação min
 #define RELAY_5_PIN               15 // bomba de irrigação
-#define RELAY_6_PIN                0 // SOLENOIDE
+#define RELAY_6_PIN               19 // SOLENOIDE porta atualizada //Marcelo 26/05
 #define RELAY_7_PIN               23 // Fan Auxiliar resfriamento
 #define RADIATION_SENSOR_PIN      34 // Sensor de Radiação
 #define SOIL_MOISTURE_SENSOR_PIN  35 // sensor de umidade do solo
@@ -78,7 +78,7 @@ const int minimum_water_level_sensor_pin = 32; //Sensor de nivel minimo
 #define TEMP_MIN   22    // Temperatura minima
 
 //DEFINIÇÕES UMIDADE DO AR
-#define UR_MAX   70   //70
+#define UR_MAX   75   //70
 #define UR_IDEAL 65   //65
 #define UR_MIN   60   //60
 
@@ -326,7 +326,7 @@ void calculateSoilMoisture(){
   }
   
   sensorReading = sensorReading/10;
-  soilMoisture = map(sensorReading, 1300, 4095, 100, 0);  //map(sensorReading, 1600, 4095, 100, 0);//sensorReading, 360, 4095, 100, 0
+  soilMoisture = map(sensorReading, 460, 4095, 100, 0);  //map(sensorReading, 1600, 4095, 100, 0);//sensorReading, 360, 4095, 100, 0
 }
 
 void loop() { 
@@ -372,10 +372,10 @@ void loop() {
           digitalWrite(RELAY_7_PIN, HIGH);
           stateTemperature = 0;
           count_read_peltier++;
-          Serial.println(count_read_peltier);
+          //Serial.println(count_read_peltier);
           if(count_read_peltier > 5){ //retarda tempo para que peltier acione depois de 5 segundos do funcionamento do Fam      //readControlPeltier       
             digitalWrite(RELAY_2_PIN, HIGH); // 
-            Serial.println(count_read_peltier);
+            //Serial.println(count_read_peltier);
             count_read_peltier = 0;
             stateTemperature = 1;
           }           
@@ -553,24 +553,24 @@ void loop() {
     
     switch (stateLight) {  // hora --> "1910"
       case 0:                                     //Leitura Anterior = Indicando temperatura ideal | peltier resfriamento e peltier aquecimento desligados
-        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "2200") {             // ligar as 0800, deliga as 2000
+        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "1900") {             // ligar as 0800, deliga as 2000
           stateLight = -1;
           digitalWrite(RELAY_4_PIN, LOW);       
-        } else if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "2200") {      ////Se Leitura Atual = Indicando tempetatura quente
+        } else if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "1900") {      ////Se Leitura Atual = Indicando tempetatura quente
           stateLight = 1;        
           digitalWrite(RELAY_4_PIN, HIGH);        
         }
         break;
       
       case -1:
-        if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "2200") {
+        if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "1900") {
           stateLight = 1;
           digitalWrite(RELAY_4_PIN, HIGH);
         }
         break;
       
       case 1:
-        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "2000") {
+        if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "1900") {
           stateLight = -1;
           digitalWrite(RELAY_4_PIN, LOW);        
         }

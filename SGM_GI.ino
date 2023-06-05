@@ -564,14 +564,14 @@ void loop() {
       
       case -1:
         if (relogio_ntp(3) >= "0800" && relogio_ntp(3) <= "1900") {
-          stateLight = 1;
+          stateLight = 0;
           digitalWrite(RELAY_4_PIN, HIGH);
         }
         break;
       
       case 1:
         if (relogio_ntp(3) < "0800" && relogio_ntp(3) > "1900") {
-          stateLight = -1;
+          stateLight = 0;
           digitalWrite(RELAY_4_PIN, LOW);        
         }
         break;
